@@ -82,6 +82,7 @@ function doPost(e) {
         return jsonOutput({ ok: false, error: 'type inválido: ' + body.type });
       }
       sheet.appendRow(buildRow(body.data));
+      return jsonOutput({ ok: true, row: sheet.getLastRow() });
     } else if (action === 'update') {
       var buildRow2 = ROW_BUILDERS[body.type];
       if (!buildRow2) {

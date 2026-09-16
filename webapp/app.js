@@ -451,8 +451,10 @@ function populateMetasForm() {
   `).join('') || '<p class="hint">Nenhuma meta cadastrada ainda. Adicione uma categoria abaixo.</p>';
 }
 
+let metasBusy = false;
 document.getElementById('formMetas').addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (metasBusy) return;
   const status = document.getElementById('metasFormStatus');
   const inputs = [...document.querySelectorAll('#metasFields input[data-row]')]
     .filter(input => Number(input.value) !== Number(input.dataset.original));
@@ -463,26 +465,37 @@ document.getElementById('formMetas').addEventListener('submit', async (e) => {
     return;
   }
 
+  metasBusy = true;
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
   status.textContent = 'Salvando...';
   status.className = 'formStatus';
   try {
     for (const input of inputs) {
-      await apiPost('meta', { categoria: input.dataset.categoria, metaMensal: input.value }, 'update', Number(input.dataset.row));
+      const data = { categoria: input.dataset.categoria, metaMensal: input.value };
+      await apiPost('meta', data, 'update', Number(input.dataset.row));
+      patchLocalRecord('meta', 'update', Number(input.dataset.row), data);
     }
     status.textContent = 'Metas salvas!';
     status.className = 'formStatus ok';
-    state.data = null;
-    await getData();
     populateMetasForm();
     populateCategorias();
   } catch (err) {
     status.textContent = err.message;
     status.className = 'formStatus err';
+  } finally {
+    metasBusy = false;
+    submitBtn.disabled = false;
   }
 });
 
+let novaMetaBusy = false;
 document.getElementById('formNovaMeta').addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (novaMetaBusy) return;
+  novaMetaBusy = true;
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
   const status = document.getElementById('novaMetaStatus');
   status.textContent = 'Salvando...';
   status.className = 'formStatus';
@@ -493,17 +506,22 @@ document.getElementById('formNovaMeta').addEventListener('submit', async (e) => 
     if (existentes.includes(categoria.toLowerCase())) {
       throw new Error('Essa categoria já tem uma meta cadastrada.');
     }
-    await apiPost('meta', { categoria, metaMensal: fd.get('metaMensal') }, 'create');
+    const metaMensal = fd.get('metaMensal');
+    const res = await apiPost('meta', { categoria, metaMensal }, 'create');
     status.textContent = 'Categoria adicionada!';
     status.className = 'formStatus ok';
     e.target.reset();
-    state.data = null;
-    await getData();
+    if (state.data && res.row) {
+      state.data.metas.push(buildStateObject('meta', { categoria, metaMensal }, res.row));
+    }
     populateMetasForm();
     populateCategorias();
   } catch (err) {
     status.textContent = err.message;
     status.className = 'formStatus err';
+  } finally {
+    novaMetaBusy = false;
+    submitBtn.disabled = false;
   }
 });
 
@@ -530,23 +548,34 @@ function todayISO() {
 function setupForm(formId, type, buildData, onSuccess) {
   const form = document.getElementById(formId);
   const status = form.querySelector('.formStatus');
+  const submitBtn = form.querySelector('button[type="submit"]');
   form.querySelector('input[type="date"]').value = todayISO();
+  let busy = false;
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (busy) return;
+    busy = true;
+    submitBtn.disabled = true;
     status.textContent = 'Salvando...';
     status.className = 'formStatus';
     try {
       const fd = new FormData(form);
-      await apiPost(type, buildData(fd));
+      const data = buildData(fd);
+      const res = await apiPost(type, data);
       status.textContent = 'Salvo!';
       status.className = 'formStatus ok';
       form.reset();
       form.querySelector('input[type="date"]').value = todayISO();
-      state.data = null;
-      if (onSuccess) onSuccess();
+      if (state.data && res.row) {
+        state.data[TYPE_STATE_KEY[type]].push(buildStateObject(type, data, res.row));
+      }
+      if (onSuccess) onSuccess(data);
     } catch (err) {
       status.textContent = err.message;
       status.className = 'formStatus err';
+    } finally {
+      busy = false;
+      submitBtn.disabled = false;
     }
   });
 }
@@ -564,7 +593,7 @@ setupForm('formReceita', 'receita', fd => ({
   fonte: fd.get('fonte'),
   descricao: fd.get('descricao'),
   valor: fd.get('valor')
-}));
+}), populateFontes);
 
 setupForm('formInvestimento', 'investimento', fd => ({
   data: fd.get('data'),
@@ -616,10 +645,38 @@ const TYPE_FIELDS = {
     { key: 'corretora', sheetKey: 'Corretora', label: 'Corretora', type: 'text' },
     { key: 'valorAportado', sheetKey: 'Valor Aportado', label: 'Valor Aportado (R$)', type: 'number' },
     { key: 'valorAtual', sheetKey: 'Valor Atual', label: 'Valor Atual (R$)', type: 'number' }
+  ],
+  meta: [
+    { key: 'categoria', sheetKey: 'Categoria', label: 'Categoria', type: 'text' },
+    { key: 'metaMensal', sheetKey: 'Meta Mensal', label: 'Meta Mensal (R$)', type: 'number' }
   ]
 };
 
-const TYPE_TITLES = { gasto: 'gasto', receita: 'receita', investimento: 'investimento' };
+const TYPE_TITLES = { gasto: 'gasto', receita: 'receita', investimento: 'investimento', meta: 'meta' };
+
+const TYPE_STATE_KEY = { gasto: 'gastos', receita: 'receitas', investimento: 'investimentos', meta: 'metas' };
+
+// Constrói o objeto local (mesmo formato que vem da planilha) a partir dos dados enviados,
+// evitando ter que reler a planilha inteira depois de cada gravação.
+function buildStateObject(type, data, row) {
+  const obj = { _row: row };
+  TYPE_FIELDS[type].forEach(f => {
+    obj[f.sheetKey] = f.type === 'number' ? Number(data[f.key]) : data[f.key];
+  });
+  return obj;
+}
+
+function patchLocalRecord(type, action, row, data) {
+  if (!state.data) return;
+  const list = state.data[TYPE_STATE_KEY[type]];
+  if (!list) return;
+  const idx = list.findIndex(it => it._row === row);
+  if (action === 'update') {
+    if (idx !== -1) list[idx] = buildStateObject(type, data, row);
+  } else if (action === 'delete') {
+    if (idx !== -1) list.splice(idx, 1);
+  }
+}
 
 function fieldInputHtml(f) {
   if (f.type === 'select-categoria') return `<select name="${f.key}">${document.getElementById('categoriaSelect').innerHTML}</select>`;
@@ -677,7 +734,7 @@ document.getElementById('formEdit').addEventListener('submit', async (e) => {
     const data = {};
     TYPE_FIELDS[state.editing.type].forEach(f => { data[f.key] = fd.get(f.key); });
     await apiPost(state.editing.type, data, 'update', state.editing.row);
-    state.data = null;
+    patchLocalRecord(state.editing.type, 'update', state.editing.row, data);
     closeEditModal();
     await refreshActiveView();
   } catch (err) {
@@ -711,7 +768,7 @@ document.getElementById('btnDeleteEdit').addEventListener('click', async (e) => 
   status.className = 'formStatus';
   try {
     await apiPost(state.editing.type, null, 'delete', state.editing.row);
-    state.data = null;
+    patchLocalRecord(state.editing.type, 'delete', state.editing.row);
     closeEditModal();
     await refreshActiveView();
   } catch (err) {

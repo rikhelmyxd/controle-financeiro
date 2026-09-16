@@ -213,7 +213,35 @@ async function refreshDashboard() {
   renderAlerts(gastosMes, data.metas);
   renderPizzaChart(gastosMes);
   renderMetasChart(gastosMes, data.metas);
+  renderGastoMensalChart(data.gastos);
   renderInvestChart(data.investimentos);
+}
+
+function renderGastoMensalChart(gastos, meses = 12) {
+  const keys = [];
+  let cursor = currentMonthKey();
+  for (let i = meses - 1; i >= 0; i--) {
+    keys.push(shiftMonthKey(cursor, -i));
+  }
+
+  const totals = keys.map(key => {
+    return gastos
+      .filter(g => String(g.Data).startsWith(key))
+      .reduce((sum, g) => sum + Number(g.Valor || 0), 0);
+  });
+
+  const labels = keys.map(key => {
+    const [y, m] = key.split('-').map(Number);
+    return `${MONTH_NAMES[m - 1].slice(0, 3)}/${String(y).slice(2)}`;
+  });
+
+  const hoje = currentMonthKey();
+  const cores = keys.map(key => (key === hoje ? '#4f8cff' : '#4f8cff88'));
+
+  upsertChart('chartGastoMensal', 'bar', {
+    labels,
+    datasets: [{ label: 'Gasto total', data: totals, backgroundColor: cores }]
+  }, { scales: { y: { beginAtZero: true } } });
 }
 
 function renderAlerts(gastosMes, metas) {

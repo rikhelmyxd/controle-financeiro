@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controle Financeiro</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <h1>
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+    Controle Financeiro
+  </h1>
+  <div class="topbar-actions">
+    <button id="btnMetas" class="icon-btn" title="Metas">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+    </button>
+    <button id="btnConfig" class="icon-btn" title="Configurações">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
+</header>
+
+<main id="app">
+
+  <!-- CONFIG -->
+  <section id="view-config" class="view">
+    <h2>Configuração</h2>
+    <p class="hint">Cole aqui a URL do App da Web do Apps Script e o token, conforme o README do projeto.</p>
+    <label>URL do Apps Script</label>
+    <input id="cfgUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec">
+    <label>Token</label>
+    <input id="cfgToken" type="text" placeholder="seu-token">
+    <button id="btnSaveConfig" class="primary">Salvar</button>
+    <p id="cfgStatus" class="hint"></p>
+    <p class="hint">Sem configurar, o app funciona em <strong>modo demonstração</strong> com dados de exemplo.</p>
+  </section>
+
+  <!-- DASHBOARD -->
+  <section id="view-dashboard" class="view">
+    <h2>Dashboard</h2>
+    <div class="month-nav">
+      <button id="prevMonth" class="icon-btn" aria-label="Mês anterior">‹</button>
+      <span id="monthLabel" class="month-label">—</span>
+      <button id="nextMonth" class="icon-btn" aria-label="Próximo mês">›</button>
+    </div>
+    <p id="demoBanner" class="banner" hidden>Modo demonstração — dados de exemplo. Configure no botão de configurações para usar sua planilha.</p>
+    <p id="errorBanner" class="banner error" hidden></p>
+    <div id="budgetAlerts" hidden></div>
+    <div class="cards">
+      <div class="card">
+        <span class="card-label">Saldo do mês</span>
+        <span id="cardSaldo" class="card-value">—</span>
+      </div>
+      <div class="card">
+        <span class="card-label">Gasto no mês</span>
+        <span id="cardGasto" class="card-value">—</span>
+      </div>
+      <div class="card">
+        <span class="card-label">Total investido</span>
+        <span id="cardInvestido" class="card-value">—</span>
+      </div>
+    </div>
+
+    <div class="chart-box">
+      <h3>Saldo das contas</h3>
+      <div id="listaSaldos" class="list"></div>
+    </div>
+
+    <div class="chart-box">
+      <h3>Gastos por categoria</h3>
+      <canvas id="chartPizza"></canvas>
+    </div>
+
+    <div class="chart-box">
+      <h3>Gasto real vs. meta por categoria</h3>
+      <canvas id="chartMetas"></canvas>
+    </div>
+
+    <div class="chart-box">
+      <h3>Evolução do total investido</h3>
+      <canvas id="chartInvest"></canvas>
+    </div>
+  </section>
+
+  <!-- LISTA -->
+  <section id="view-lista" class="view">
+    <h2>Lista de Lançamentos</h2>
+    <div class="month-nav">
+      <button id="prevMonthList" class="icon-btn" aria-label="Mês anterior">‹</button>
+      <span class="month-label" id="monthLabelList">—</span>
+      <button id="nextMonthList" class="icon-btn" aria-label="Próximo mês">›</button>
+    </div>
+
+    <h3>Gastos por categoria</h3>
+    <div id="listaGastosPorCategoria"></div>
+
+    <h3>Receitas por fonte</h3>
+    <div id="listaReceitasPorFonte"></div>
+  </section>
+
+  <!-- METAS -->
+  <section id="view-metas" class="view">
+    <h2>Metas por categoria</h2>
+    <p class="hint">Defina o valor mensal de orçamento para cada categoria de gasto.</p>
+    <form id="formMetas">
+      <div id="metasFields"></div>
+      <button type="submit" class="primary">Salvar metas</button>
+      <p class="formStatus" id="metasFormStatus"></p>
+    </form>
+
+    <h3>Adicionar categoria</h3>
+    <form id="formNovaMeta">
+      <label>Categoria</label>
+      <input type="text" name="categoria" placeholder="Ex: Pets" required>
+      <label>Meta mensal (R$)</label>
+      <input type="number" step="0.01" min="0" name="metaMensal" required>
+      <button type="submit" class="primary">Adicionar</button>
+      <p class="formStatus" id="novaMetaStatus"></p>
+    </form>
+  </section>
+
+  <!-- GASTO -->
+  <section id="view-gasto" class="view">
+    <h2>Novo Gasto</h2>
+    <form id="formGasto">
+      <label>Data</label>
+      <input type="date" name="data" required>
+      <label>Categoria</label>
+      <select name="categoria" id="categoriaSelect" required></select>
+      <label>Descrição</label>
+      <input type="text" name="descricao" placeholder="Ex: Supermercado">
+      <label>Valor (R$)</label>
+      <input type="number" step="0.01" min="0" name="valor" required>
+      <label>Forma de pagamento</label>
+      <select name="formaPagamento">
+        <option>Pix</option>
+        <option>Cartão de crédito</option>
+        <option>Cartão de débito</option>
+        <option>Dinheiro</option>
+        <option>Outro</option>
+      </select>
+      <button type="submit" class="primary">Salvar gasto</button>
+      <p class="formStatus"></p>
+    </form>
+  </section>
+
+  <!-- RECEITA -->
+  <section id="view-receita" class="view">
+    <h2>Nova Receita</h2>
+    <form id="formReceita">
+      <label>Data</label>
+      <input type="date" name="data" required>
+      <label>Fonte</label>
+      <select name="fonte" id="fonteSelect" required></select>
+      <label>Descrição</label>
+      <input type="text" name="descricao">
+      <label>Valor (R$)</label>
+      <input type="number" step="0.01" min="0" name="valor" required>
+      <button type="submit" class="primary">Salvar receita</button>
+      <p class="formStatus"></p>
+    </form>
+  </section>
+
+  <!-- INVESTIMENTO -->
+  <section id="view-investimento" class="view">
+    <h2>Investimento</h2>
+    <form id="formInvestimento">
+      <label>Data</label>
+      <input type="date" name="data" required>
+      <label>Tipo</label>
+      <input type="text" name="tipo" placeholder="Ex: Ações, Renda Fixa, Cripto" required>
+      <label>Corretora</label>
+      <input type="text" name="corretora" placeholder="Ex: XP" value="XP">
+      <label>Valor aportado (R$)</label>
+      <input type="number" step="0.01" min="0" name="valorAportado" required>
+      <label>Valor atual (R$)</label>
+      <input type="number" step="0.01" min="0" name="valorAtual" required>
+      <button type="submit" class="primary">Salvar investimento</button>
+      <p class="formStatus"></p>
+    </form>
+    <h3>Últimos lançamentos</h3>
+    <div id="listaInvestimentos" class="list"></div>
+  </section>
+
+  <!-- MODAL DE EDIÇÃO -->
+  <div id="editModal" class="modal-overlay" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="editModalTitle">Editar lançamento</h3>
+        <button type="button" id="editModalClose" class="icon-btn" aria-label="Fechar">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <form id="formEdit">
+        <div id="editFields"></div>
+        <div class="modal-actions">
+          <button type="button" id="btnDeleteEdit" class="danger">Excluir</button>
+          <button type="submit" class="primary">Salvar</button>
+        </div>
+        <p class="formStatus" id="editStatus"></p>
+      </form>
+    </div>
+  </div>
+
+</main>
+
+<nav class="tabbar">
+  <button class="tab-btn active" data-view="dashboard">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+    <span>Dashboard</span>
+  </button>
+  <button class="tab-btn" data-view="lista">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+    <span>Lista</span>
+  </button>
+  <button class="tab-btn" data-view="gasto">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+    <span>Gasto</span>
+  </button>
+  <button class="tab-btn" data-view="receita">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+    <span>Receita</span>
+  </button>
+  <button class="tab-btn" data-view="investimento">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+    <span>Invest.</span>
+  </button>
+</nav>
+
+<script src="app.js"></script>
+</body>
+</html>

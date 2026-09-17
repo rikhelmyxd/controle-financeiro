@@ -71,12 +71,37 @@ document.getElementById('btnSaveConfig').addEventListener('click', () => {
 
 // ---------- API ----------
 
+let loadingCount = 0;
+let loadingTimer = null;
+
+function beginLoading() {
+  loadingCount++;
+  if (loadingCount === 1) {
+    loadingTimer = setTimeout(() => {
+      document.getElementById('loadingBar').hidden = false;
+    }, 150);
+  }
+}
+
+function endLoading() {
+  loadingCount = Math.max(0, loadingCount - 1);
+  if (loadingCount === 0) {
+    clearTimeout(loadingTimer);
+    document.getElementById('loadingBar').hidden = true;
+  }
+}
+
 async function apiGet() {
   if (!isConfigured()) return demoData();
-  const res = await fetch(`${state.config.url}?token=${encodeURIComponent(state.config.token)}`);
-  const json = await res.json();
-  if (!json.ok) throw new Error(json.error || 'Erro ao buscar dados');
-  return json;
+  beginLoading();
+  try {
+    const res = await fetch(`${state.config.url}?token=${encodeURIComponent(state.config.token)}`);
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Erro ao buscar dados');
+    return json;
+  } finally {
+    endLoading();
+  }
 }
 
 async function apiPost(type, data, action = 'create', row = null) {
@@ -86,20 +111,35 @@ async function apiPost(type, data, action = 'create', row = null) {
   const body = { token: state.config.token, type, action };
   if (data) body.data = data;
   if (row) body.row = row;
-  const res = await fetch(state.config.url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(body)
-  });
-  const json = await res.json();
-  if (!json.ok) throw new Error(json.error || 'Erro ao salvar');
-  return json;
+  beginLoading();
+  try {
+    const res = await fetch(state.config.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(body)
+    });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Erro ao salvar');
+    return json;
+  } finally {
+    endLoading();
+  }
 }
+
+let pendingGet = null;
 
 async function getData(force = false) {
   if (state.data && !force) return state.data;
-  state.data = await apiGet();
-  return state.data;
+  if (pendingGet) return pendingGet;
+  pendingGet = apiGet()
+    .then(data => {
+      state.data = data;
+      return data;
+    })
+    .finally(() => {
+      pendingGet = null;
+    });
+  return pendingGet;
 }
 
 // ---------- Demo data ----------

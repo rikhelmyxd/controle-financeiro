@@ -609,6 +609,112 @@ function populateFontes() {
   select.innerHTML = fontes.map(f => `<option>${f}</option>`).join('');
 }
 
+// ---------- Importar PDF (comprovante BB) ----------
+
+function friendlyError(message) {
+  const err = new Error(message);
+  err.friendly = true;
+  return err;
+}
+
+let pdfJsLoadPromise = null;
+
+function loadPdfJs() {
+  if (window.pdfjsLib) return Promise.resolve();
+  if (pdfJsLoadPromise) return pdfJsLoadPromise;
+  pdfJsLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    script.onload = () => {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      resolve();
+    };
+    script.onerror = () => reject(friendlyError('Não foi possível carregar o leitor de PDF.'));
+    document.head.appendChild(script);
+  });
+  return pdfJsLoadPromise;
+}
+
+async function extractPdfItems(file) {
+  const buffer = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: buffer }).promise;
+  let items = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    items = items.concat(content.items.map(item => item.str));
+  }
+  return items.map(s => s.trim()).filter(Boolean);
+}
+
+function parseComprovanteBB(items) {
+  const text = items.join(' ');
+  const result = {};
+
+  const valorMatch = text.match(/R\$\s*([\d.,]+)/);
+  if (valorMatch) {
+    const num = Number(valorMatch[1].replace(/\./g, '').replace(',', '.'));
+    if (!isNaN(num)) result.valor = num.toFixed(2);
+  }
+
+  const dataMatch = text.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  if (dataMatch) {
+    result.data = `${dataMatch[3]}-${dataMatch[2]}-${dataMatch[1]}`;
+  }
+
+  if (/pix/i.test(text)) result.formaPagamento = 'Pix';
+
+  // No comprovante do BB, o nome do recebedor vem logo depois do item "Pix - QR Code".
+  const pixIdx = items.findIndex(s => /^pix\b/i.test(s));
+  if (pixIdx !== -1 && items[pixIdx + 1]) {
+    result.descricao = items[pixIdx + 1];
+  }
+
+  return result;
+}
+
+document.getElementById('btnImportarPdf').addEventListener('click', () => {
+  document.getElementById('pdfInput').click();
+});
+
+document.getElementById('pdfInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+
+  const form = document.getElementById('formGasto');
+  const status = form.querySelector('.formStatus');
+  const btn = document.getElementById('btnImportarPdf');
+  btn.disabled = true;
+  status.textContent = 'Lendo PDF...';
+  status.className = 'formStatus';
+
+  try {
+    await loadPdfJs();
+    const items = await extractPdfItems(file);
+    const dados = parseComprovanteBB(items);
+
+    if (!dados.valor || !dados.data) {
+      throw friendlyError('Não consegui identificar os dados neste PDF automaticamente. Preencha manualmente.');
+    }
+
+    form.querySelector('[name="data"]').value = dados.data;
+    form.querySelector('[name="valor"]').value = dados.valor;
+    if (dados.descricao) form.querySelector('[name="descricao"]').value = dados.descricao;
+    if (dados.formaPagamento) form.querySelector('[name="formaPagamento"]').value = dados.formaPagamento;
+
+    status.textContent = 'Dados extraídos do PDF — confira e escolha a categoria antes de salvar.';
+    status.className = 'formStatus ok';
+  } catch (err) {
+    status.textContent = err.friendly
+      ? err.message
+      : 'Não consegui ler esse PDF automaticamente. Preencha manualmente.';
+    status.className = 'formStatus err';
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }

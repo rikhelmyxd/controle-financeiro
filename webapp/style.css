@@ -219,6 +219,26 @@ button.primary {
 }
 button.primary:active { opacity: 0.85; }
 
+button.btn-secondary {
+  width: 100%;
+  margin-bottom: 14px;
+  background: var(--surface);
+  color: var(--primary);
+  border: 1px dashed var(--primary);
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+button.btn-secondary:active { opacity: 0.85; }
+button.btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+button.btn-secondary .icon { width: 18px; height: 18px; flex-shrink: 0; }
+
 button.danger {
   flex: 1;
   background: var(--surface-2);

@@ -673,6 +673,15 @@ function parseComprovanteBB(items) {
   return result;
 }
 
+function sugerirCategoria(descricao) {
+  const gastos = state.data?.gastos || [];
+  const alvo = descricao.trim().toLowerCase();
+  const correspondentes = gastos.filter(g => String(g.Descrição || '').trim().toLowerCase() === alvo);
+  if (!correspondentes.length) return null;
+  correspondentes.sort((a, b) => String(b.Data).localeCompare(String(a.Data)));
+  return correspondentes[0].Categoria || null;
+}
+
 document.getElementById('btnImportarPdf').addEventListener('click', () => {
   document.getElementById('pdfInput').click();
 });
@@ -703,7 +712,14 @@ document.getElementById('pdfInput').addEventListener('change', async (e) => {
     if (dados.descricao) form.querySelector('[name="descricao"]').value = dados.descricao;
     if (dados.formaPagamento) form.querySelector('[name="formaPagamento"]').value = dados.formaPagamento;
 
-    status.textContent = 'Dados extraídos do PDF — confira e escolha a categoria antes de salvar.';
+    const categoriaSugerida = dados.descricao ? sugerirCategoria(dados.descricao) : null;
+    if (categoriaSugerida) {
+      form.querySelector('[name="categoria"]').value = categoriaSugerida;
+    }
+
+    status.textContent = categoriaSugerida
+      ? `Dados extraídos do PDF — categoria sugerida (${categoriaSugerida}) com base em lançamentos anteriores. Confira antes de salvar.`
+      : 'Dados extraídos do PDF — confira e escolha a categoria antes de salvar.';
     status.className = 'formStatus ok';
   } catch (err) {
     status.textContent = err.friendly

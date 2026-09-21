@@ -682,6 +682,18 @@ function sugerirCategoria(descricao) {
   return correspondentes[0].Categoria || null;
 }
 
+function encontrarDuplicado(dados) {
+  if (!dados.descricao || !dados.data || !dados.valor) return null;
+  const gastos = state.data?.gastos || [];
+  const alvoDescricao = dados.descricao.trim().toLowerCase();
+  const alvoValor = Number(dados.valor);
+  return gastos.find(g =>
+    String(g.Data).slice(0, 10) === dados.data &&
+    Math.abs(Number(g.Valor) - alvoValor) < 0.005 &&
+    String(g.Descrição || '').trim().toLowerCase() === alvoDescricao
+  ) || null;
+}
+
 document.getElementById('btnImportarPdf').addEventListener('click', () => {
   document.getElementById('pdfInput').click();
 });
@@ -717,10 +729,17 @@ document.getElementById('pdfInput').addEventListener('change', async (e) => {
       form.querySelector('[name="categoria"]').value = categoriaSugerida;
     }
 
-    status.textContent = categoriaSugerida
-      ? `Dados extraídos do PDF — categoria sugerida (${categoriaSugerida}) com base em lançamentos anteriores. Confira antes de salvar.`
-      : 'Dados extraídos do PDF — confira e escolha a categoria antes de salvar.';
-    status.className = 'formStatus ok';
+    const duplicado = encontrarDuplicado(dados);
+
+    if (duplicado) {
+      status.textContent = `Atenção: já existe um gasto igual lançado em ${fmtShortDate(duplicado.Data)} (${fmtMoney(Number(duplicado.Valor))} · ${duplicado.Descrição}). Confira antes de salvar — pode ser duplicado.`;
+      status.className = 'formStatus warn';
+    } else {
+      status.textContent = categoriaSugerida
+        ? `Dados extraídos do PDF — categoria sugerida (${categoriaSugerida}) com base em lançamentos anteriores. Confira antes de salvar.`
+        : 'Dados extraídos do PDF — confira e escolha a categoria antes de salvar.';
+      status.className = 'formStatus ok';
+    }
   } catch (err) {
     status.textContent = err.friendly
       ? err.message

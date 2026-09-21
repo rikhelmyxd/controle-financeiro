@@ -256,6 +256,7 @@ button.primary:disabled, button.danger:disabled { opacity: 0.5; cursor: not-allo
 .formStatus { min-height: 1.2em; font-size: 0.85rem; margin-top: 10px; }
 .formStatus.ok { color: var(--good); }
 .formStatus.err { color: var(--bad); }
+.formStatus.warn { color: #ffb84f; }
 
 .list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 .list-item {

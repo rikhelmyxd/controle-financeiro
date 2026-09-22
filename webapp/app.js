@@ -800,6 +800,141 @@ document.getElementById('pdfInput').addEventListener('change', async (e) => {
   }
 });
 
+// ---------- Falar gasto (ditado do teclado do iPhone) ----------
+
+const PALAVRAS_CATEGORIA = {
+  mercado: 'Alimentação', supermercado: 'Alimentação', restaurante: 'Alimentação',
+  ifood: 'Alimentação', lanche: 'Alimentação', padaria: 'Alimentação', açaí: 'Alimentação',
+  uber: 'Transporte', '99': 'Transporte', combustível: 'Transporte', combustivel: 'Transporte',
+  gasolina: 'Transporte', ônibus: 'Transporte', onibus: 'Transporte', estacionamento: 'Transporte',
+  farmácia: 'Saúde', farmacia: 'Saúde', remédio: 'Saúde', remedio: 'Saúde', médico: 'Saúde', medico: 'Saúde',
+  cinema: 'Lazer', show: 'Lazer', bar: 'Lazer', streaming: 'Lazer',
+  faculdade: 'Educação', curso: 'Educação', livro: 'Educação'
+};
+
+function sugerirCategoriaPorPalavra(descricao) {
+  const alvo = descricao.toLowerCase();
+  for (const palavra in PALAVRAS_CATEGORIA) {
+    if (alvo.includes(palavra)) return PALAVRAS_CATEGORIA[palavra];
+  }
+  return null;
+}
+
+function parseFalaGasto(texto) {
+  const lower = texto.trim().toLowerCase();
+  const result = {};
+
+  if (/\banteontem\b/.test(lower)) {
+    const d = new Date();
+    d.setDate(d.getDate() - 2);
+    result.data = d.toISOString().slice(0, 10);
+  } else if (/\bontem\b/.test(lower)) {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    result.data = d.toISOString().slice(0, 10);
+  } else {
+    result.data = todayISO();
+  }
+
+  // Tenta achar "N reais" / "R$ N" primeiro; se a pessoa não falar "reais",
+  // usa o primeiro número solto da frase como valor.
+  const valorMatch =
+    lower.match(/(\d+(?:[.,]\d+)?)\s*reais?/) ||
+    lower.match(/r\$\s*(\d+(?:[.,]\d+)?)/) ||
+    lower.match(/\b(\d+(?:[.,]\d{1,2})?)\b/);
+  if (valorMatch) {
+    const num = Number(valorMatch[1].replace(',', '.'));
+    if (!isNaN(num)) result.valor = num.toFixed(2);
+  }
+
+  if (/\bpix\b/.test(lower)) result.formaPagamento = 'Pix';
+  else if (/cart[aã]o de cr[eé]dito|\bcr[eé]dito\b/.test(lower)) result.formaPagamento = 'Cartão de crédito';
+  else if (/cart[aã]o de d[eé]bito|\bd[eé]bito\b/.test(lower)) result.formaPagamento = 'Cartão de débito';
+  else if (/\bdinheiro\b/.test(lower)) result.formaPagamento = 'Dinheiro';
+
+  let t = ` ${lower} `;
+  t = t.replace(/\d+(?:[.,]\d+)?\s*reais?/g, ' ');
+  t = t.replace(/r\$\s*\d+(?:[.,]\d+)?/g, ' ');
+  t = t.replace(/\b\d+(?:[.,]\d+)?\b/g, ' ');
+  const stopwords = ['hoje', 'ontem', 'anteontem', 'gastei', 'gastou', 'comprei', 'paguei', 'gasto',
+    'de', 'do', 'da', 'no', 'na', 'em', 'com', 'e', 'o', 'a', 'os', 'as', 'um', 'uma',
+    'pix', 'cartão', 'cartao', 'crédito', 'credito', 'débito', 'debito', 'dinheiro', 'reais', 'real'];
+  t = t.replace(new RegExp('\\b(' + stopwords.join('|') + ')\\b', 'g'), ' ');
+  t = t.replace(/\s+/g, ' ').trim();
+  if (t) {
+    result.descricao = t.charAt(0).toUpperCase() + t.slice(1);
+  }
+
+  return result;
+}
+
+document.getElementById('btnFalarGasto').addEventListener('click', () => {
+  const box = document.getElementById('falarGastoBox');
+  box.hidden = false;
+  const input = document.getElementById('falarGastoInput');
+  input.value = '';
+  input.focus();
+});
+
+document.getElementById('btnInterpretarFala').addEventListener('click', () => {
+  const texto = document.getElementById('falarGastoInput').value;
+  const form = document.getElementById('formGasto');
+  const status = form.querySelector('.formStatus');
+
+  if (!texto || !texto.trim()) {
+    status.textContent = 'Nada foi falado/digitado. Toque no campo, use o microfone do teclado e tente de novo.';
+    status.className = 'formStatus err';
+    return;
+  }
+
+  const dados = parseFalaGasto(texto);
+
+  if (!dados.valor) {
+    status.textContent = 'Não consegui identificar o valor. Inclua algo como "50 reais" na frase.';
+    status.className = 'formStatus err';
+    return;
+  }
+
+  const camposImportados = ['data', 'valor'];
+  form.querySelector('[name="data"]').value = dados.data;
+  form.querySelector('[name="valor"]').value = dados.valor;
+  if (dados.descricao) {
+    form.querySelector('[name="descricao"]').value = dados.descricao;
+    camposImportados.push('descricao');
+  }
+  if (dados.formaPagamento) {
+    form.querySelector('[name="formaPagamento"]').value = dados.formaPagamento;
+    camposImportados.push('formaPagamento');
+  }
+
+  const categoriaSugerida = dados.descricao
+    ? (sugerirCategoria(dados.descricao) || sugerirCategoriaPorPalavra(dados.descricao))
+    : null;
+  if (categoriaSugerida) {
+    form.querySelector('[name="categoria"]').value = categoriaSugerida;
+    camposImportados.push('categoria');
+  }
+
+  form.querySelectorAll('.campo-importado').forEach(el => el.classList.remove('campo-importado'));
+  camposImportados.forEach(name => {
+    const el = form.querySelector(`[name="${name}"]`);
+    if (el) el.classList.add('campo-importado');
+  });
+
+  const duplicado = encontrarDuplicado(dados);
+  if (duplicado) {
+    status.textContent = `Atenção: já existe um gasto igual lançado em ${fmtShortDate(duplicado.Data)} (${fmtMoney(Number(duplicado.Valor))} · ${duplicado.Descrição}). Confira antes de salvar — pode ser duplicado.`;
+    status.className = 'formStatus warn';
+  } else {
+    status.textContent = categoriaSugerida
+      ? `Entendido — categoria sugerida (${categoriaSugerida}). Confira antes de salvar.`
+      : 'Entendido — confira os campos e escolha a categoria antes de salvar.';
+    status.className = 'formStatus ok';
+  }
+
+  document.getElementById('falarGastoBox').hidden = true;
+});
+
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }

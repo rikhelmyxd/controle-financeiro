@@ -647,21 +647,22 @@ async function extractPdfItems(file) {
   return items.map(s => s.trim()).filter(Boolean);
 }
 
-function parseComprovanteBB(items) {
-  const text = items.join(' ');
-  const result = {};
-
+function parseValorGenerico(text) {
   const valorMatch = text.match(/R\$\s*([\d.,]+)/);
-  if (valorMatch) {
-    const num = Number(valorMatch[1].replace(/\./g, '').replace(',', '.'));
-    if (!isNaN(num)) result.valor = num.toFixed(2);
-  }
+  if (!valorMatch) return null;
+  const num = Number(valorMatch[1].replace(/\./g, '').replace(',', '.'));
+  return isNaN(num) ? null : num.toFixed(2);
+}
 
+function parseDataGenerica(text) {
   const dataMatch = text.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-  if (dataMatch) {
-    result.data = `${dataMatch[3]}-${dataMatch[2]}-${dataMatch[1]}`;
-  }
+  return dataMatch ? `${dataMatch[3]}-${dataMatch[2]}-${dataMatch[1]}` : null;
+}
 
+function parseComprovanteBB(items, text) {
+  const result = {};
+  result.valor = parseValorGenerico(text);
+  result.data = parseDataGenerica(text);
   if (/pix/i.test(text)) result.formaPagamento = 'Pix';
 
   // No comprovante do BB, o nome do recebedor vem logo depois do item "Pix - QR Code".
@@ -671,6 +672,33 @@ function parseComprovanteBB(items) {
   }
 
   return result;
+}
+
+function parseComprovanteBradesco(items, text) {
+  const result = {};
+  result.valor = parseValorGenerico(text);
+
+  // O Bradesco mostra a data de geração do comprovante no topo, mas a data real
+  // do gasto é a "Data do débito" — prioriza ela quando existir.
+  const debitoIdx = items.findIndex(s => /^Data do d.bito:?$/i.test(s));
+  const dataFonte = (debitoIdx !== -1 && items[debitoIdx + 1]) ? items[debitoIdx + 1] : text;
+  result.data = parseDataGenerica(dataFonte);
+
+  if (/pix/i.test(text)) result.formaPagamento = 'Pix';
+
+  // No comprovante do Bradesco, "Nome:" aparece primeiro em "Dados de quem recebeu".
+  const nomeIdx = items.findIndex(s => s === 'Nome:');
+  if (nomeIdx !== -1 && items[nomeIdx + 1]) {
+    result.descricao = items[nomeIdx + 1];
+  }
+
+  return result;
+}
+
+function parseComprovante(items) {
+  const text = items.join(' ');
+  if (/bradesco/i.test(text)) return parseComprovanteBradesco(items, text);
+  return parseComprovanteBB(items, text);
 }
 
 function sugerirCategoria(descricao) {
@@ -713,7 +741,7 @@ document.getElementById('pdfInput').addEventListener('change', async (e) => {
   try {
     await loadPdfJs();
     const items = await extractPdfItems(file);
-    const dados = parseComprovanteBB(items);
+    const dados = parseComprovante(items);
 
     if (!dados.valor || !dados.data) {
       throw friendlyError('Não consegui identificar os dados neste PDF automaticamente. Preencha manualmente.');

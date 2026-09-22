@@ -722,6 +722,14 @@ function encontrarDuplicado(dados) {
   ) || null;
 }
 
+// Se o usuário editar manualmente um campo preenchido pelo PDF, tira o destaque dele.
+document.getElementById('formGasto').addEventListener('input', (e) => {
+  e.target.classList?.remove('campo-importado');
+});
+document.getElementById('formGasto').addEventListener('change', (e) => {
+  e.target.classList?.remove('campo-importado');
+});
+
 document.getElementById('btnImportarPdf').addEventListener('click', () => {
   document.getElementById('pdfInput').click();
 });
@@ -747,15 +755,29 @@ document.getElementById('pdfInput').addEventListener('change', async (e) => {
       throw friendlyError('Não consegui identificar os dados neste PDF automaticamente. Preencha manualmente.');
     }
 
+    const camposImportados = ['data', 'valor'];
     form.querySelector('[name="data"]').value = dados.data;
     form.querySelector('[name="valor"]').value = dados.valor;
-    if (dados.descricao) form.querySelector('[name="descricao"]').value = dados.descricao;
-    if (dados.formaPagamento) form.querySelector('[name="formaPagamento"]').value = dados.formaPagamento;
+    if (dados.descricao) {
+      form.querySelector('[name="descricao"]').value = dados.descricao;
+      camposImportados.push('descricao');
+    }
+    if (dados.formaPagamento) {
+      form.querySelector('[name="formaPagamento"]').value = dados.formaPagamento;
+      camposImportados.push('formaPagamento');
+    }
 
     const categoriaSugerida = dados.descricao ? sugerirCategoria(dados.descricao) : null;
     if (categoriaSugerida) {
       form.querySelector('[name="categoria"]').value = categoriaSugerida;
+      camposImportados.push('categoria');
     }
+
+    form.querySelectorAll('.campo-importado').forEach(el => el.classList.remove('campo-importado'));
+    camposImportados.forEach(name => {
+      const el = form.querySelector(`[name="${name}"]`);
+      if (el) el.classList.add('campo-importado');
+    });
 
     const duplicado = encontrarDuplicado(dados);
 
@@ -803,6 +825,7 @@ function setupForm(formId, type, buildData, onSuccess) {
       status.className = 'formStatus ok';
       form.reset();
       form.querySelector('input[type="date"]').value = todayISO();
+      form.querySelectorAll('.campo-importado').forEach(el => el.classList.remove('campo-importado'));
       if (state.data && res.row) {
         state.data[TYPE_STATE_KEY[type]].push(buildStateObject(type, data, res.row));
       }
